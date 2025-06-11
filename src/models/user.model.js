@@ -41,7 +41,7 @@ const userSchema= new Schema({
             type:String,
             required:[true,'Passord is required'],
         },
-    refreshToke:{
+    refreshToken:{
             type:String,
         }
     
@@ -54,7 +54,7 @@ const userSchema= new Schema({
 //to encrypt the password using pre hook and bcrypt package 
 userSchema.pre ("save",async function (next) {
     if(!this.isModified("password")) return next();   // Ensure that the password is only encrypted when it is updated
-    this.password=bcrypt.hash(this.password,10)
+    this.password= await bcrypt.hash(this.password,10)
     next()
 }) 
 userSchema.methods.isPasswordCorrect=async function(password){    //this will check password is correct or not for existing user
@@ -84,4 +84,4 @@ userSchema.methods.generateRefreshToken=function(){
         }
     )
 }
-export const User=mongoose.model("User",userSchema)
+export const User=mongoose.model("User",userSchema)   // Ye User direct db se connect kr skta hai 
