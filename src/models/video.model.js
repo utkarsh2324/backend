@@ -31,7 +31,7 @@ const videoSchema=new Schema({
     },
     owner:{
         type:mongoose.Schema.Types.ObjectId,
-        ref:"user"
+        ref:"User"
     }
 },{
     timestamps:true
