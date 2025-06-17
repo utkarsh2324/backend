@@ -5,7 +5,7 @@ import { loggedOutUser, registerUser,loginUser, changeCurrentPassword,
 import { upload } from "../middlewares/multer.middlewares.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
-import { uploadOnCloudinary } from "../uitls/cloudinary.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 
 const router=Router()
@@ -36,7 +36,7 @@ router.route("/avatar")
 router.route("/coverImage")
 .patch(verifyJWT,upload.single("coverImage"),updateUserCoverImage)  //patch because of url 
 
-router.route("/c/:username").get(verifyJWT,getUserChannelProfile)
+router.route("/channel/:username").get(verifyJWT,getUserChannelProfile)
 router.route("/watchHistory").get(verifyJWT,getWatchHistory)
 
 export default router
