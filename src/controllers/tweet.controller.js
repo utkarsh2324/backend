@@ -1,9 +1,33 @@
 import { isValidObjectId } from "mongoose";
 import { Tweet } from "../models/tweet.model.js";
+import { Like } from "../models/like.model.js";
 import { apierror } from "../utils/apierror.js";
 import { apiresponse} from "../utils/apiresponse.js";
 import { asynchandler } from "../utils/asynchandler.js";
 
+// controllers/tweetController.js
+const getAllTweets = asynchandler(async (req, res) => {
+  const userId = req.user._id;
+
+  const tweets = await Tweet.find()
+    .populate('owner', 'fullName email avatar')
+    .sort({ createdAt: -1 });
+
+  const tweetsWithLikes = await Promise.all(
+    tweets.map(async (tweet) => {
+      const likesCount = await Like.countDocuments({ tweet: tweet._id });
+      const likedByMe = await Like.exists({ tweet: tweet._id, likedBy: userId });
+
+      return {
+        ...tweet.toObject(),
+        likesCount,
+        likedByMe: !!likedByMe,
+      };
+    })
+  );
+
+  res.status(200).json(new apiresponse(200, tweetsWithLikes, "Fetched all tweets"));
+});
 const createTweet = asynchandler(async (req, res) => {
   const { content } = req.body; // Extracts the tweet content from the request body
   const ownerId = req.user._id; // Get the logged-in user's ID
@@ -22,7 +46,7 @@ const createTweet = asynchandler(async (req, res) => {
      - MongoDB automatically assigns a unique `_id` to the tweet.
   */
   const newTweet = await Tweet.create({ content, owner: ownerId });
-
+  await newTweet.populate('owner', 'fullName email avatar');
   // Error Handling: If something goes wrong with saving to the database
   if (!newTweet) {
     throw new apierror(500, "Something went wrong while creating a tweet");
@@ -45,121 +69,54 @@ How does this work in an app? - Notes:
 });
 
 const getUserTweets = asynchandler(async (req, res) => {
-  // Extracting userId from request parameters
   const { userId } = req.params;
 
-  // We need to ensure the provided user ID is a valid MongoDB ObjectId
   if (!isValidObjectId(userId)) {
     throw new apierror(400, "Invalid user ID");
   }
 
-  // Fetch tweets from the database
-  // We query the Tweet collection for tweets where the 'owner' field matches the userId
-  // We also sort the tweets by 'createdAt' in descending order (-1) to show the latest tweets first
-  const tweets = await Tweet.find({ owner: userId }).sort({ createdAt: -1 });
+  const tweets = await Tweet.find({ owner: userId })
+    .sort({ createdAt: -1 })
+    .populate({
+      path: 'owner',
+      select: 'fullName username email avatar',
+    });
 
-  //  Handle case where no tweets are found
   if (!tweets || tweets.length === 0) {
     throw new apierror(404, "Tweets are not found");
   }
 
-  // Return the response with tweets
   return res
     .status(200)
     .json(new apiresponse(200, tweets, "User tweets fetched successfully"));
-
-  /*
-Fetching User Tweets - Notes:
-
-👉 Why do we use `.sort({ createdAt: -1 })`?
-   - Sorting ensures that the newest tweets appear first in the response.
-   - `-1` means descending order, so the most recent tweets are shown first.
-
-*/
 });
 
-const updateTweet = asynchandler(async (req, res) => {
-  // Extract tweetId from request parameters
-  const { tweetId } = req.params;
 
-  // Extract updated tweet content from request body
+
+const updateTweet = asynchandler(async (req, res) => {
+  const { tweetId } = req.params;
   const { content } = req.body;
 
-  // Get the ID of the currently authenticated user
-  const userId = req.user._id;
-
-  /*
-    Tweet Updating Logic:
-    - `tweetId`: The ID of the tweet the user wants to update.
-    - `content`: The new content that will replace the existing tweet.
-    - `userId`: The ID of the user attempting to update the tweet.
-  */
-
-  // Validate if tweetId is a proper MongoDB ObjectId
-  if (!isValidObjectId(tweetId)) {
-    throw new apierror(400, "Invalid tweet ID");
+  if (!content) {
+    throw new apierror(400, 'Content cannot be empty');
   }
 
-  /*
-     Fetch the existing tweet from the database:
-    - `Tweet.findById(tweetId)`: Searches for the tweet using its unique ID.
-  */
   const tweet = await Tweet.findById(tweetId);
   if (!tweet) {
-    throw new apierror(404, "Tweet not found");
+    throw new apierror(404, 'Tweet not found');
   }
 
-  /*
-    - Users should only be able to edit their own tweets.
-    - Convert ObjectIds to strings before comparing.
-  */
-  if ( !tweet.user || tweet.user.toString() !== userId.toString()) {
-    throw new apierror(403, "You can only update your own tweets");
+  if (tweet.owner.toString() !== req.user._id.toString()) {
+    throw new apierror(403, 'You are not authorized to update this tweet');
   }
 
-  /*
-     Update the Tweet:
-    - `findByIdAndUpdate()`: Finds a tweet by its ID and updates its content.
-    - `$set`: Specifies the fields to update.
-    - `{ new: true }`: Ensures the function returns the updated tweet, not the old one.
-  */
-  const updatedTweet = await Tweet.findByIdAndUpdate(
-    tweetId,
-    {
-      $set: {
-        content,
-      },
-    },
-    {
-      new: true,
-    }
-  );
+  tweet.content = content;
+  await tweet.save();
 
-  if (!updatedTweet) {
-    throw new apierror(500, "Something went wrong while updating the tweet");
-  }
+  // ✅ Populate the updated tweet with owner data
+  await tweet.populate('owner', 'fullName email avatar');
 
-  /*
-     Responding to the Client:
-    - Returns the updated tweet data.
-  */
-  res
-    .status(200)
-    .json(new apiresponse(200, updatedTweet, "Tweet updated successfully"));
-
-  /*
-
- Updating a Tweet - Notes:
-
-  👉 Why fetch the tweet first before updating?
-     - Ensures the tweet exists before attempting an update.
-     - Allows us to verify the tweet owner before making changes.
-
-  👉 Why is `content` from `req.body` used inside `$set`?
-     - The extracted content is the new tweet content replacing the old one.
-     - It ensures only the content field is updated while keeping other tweet data intact.
-
-*/
+  return res.status(200).json(new apiresponse(200, tweet, 'Tweet updated successfully'));
 });
 
 const deleteTweet = asynchandler(async (req, res) => {
@@ -222,4 +179,4 @@ const deleteTweet = asynchandler(async (req, res) => {
 */
 });
 
-export { createTweet, getUserTweets, updateTweet, deleteTweet };
+export { createTweet, getUserTweets, updateTweet, deleteTweet,getAllTweets };

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { loggedOutUser, registerUser,loginUser, changeCurrentPassword, 
     getCurrentUser, updateAccountDetails, updateUserAvatar, updateUserCoverImage, refreshAccessToken ,
-    getUserChannelProfile, getWatchHistory } from "../controllers/user.controller.js";
+    getUserChannelProfile, watchHistory,addToWatchHistory } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middlewares.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -37,6 +37,8 @@ router.route("/coverImage")
 .patch(verifyJWT,upload.single("coverImage"),updateUserCoverImage)  //patch because of url 
 
 router.route("/channel/:username").get(verifyJWT,getUserChannelProfile)
-router.route("/watchHistory").get(verifyJWT,getWatchHistory)
+// routes/videoRoutes.js or userRoutes.js
+router.post("/watch/:videoId", verifyJWT, addToWatchHistory);
+router.route("/watchHistory").get(verifyJWT,watchHistory)
 
 export default router

@@ -5,6 +5,7 @@ import {User} from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { apiresponse } from "../utils/apiresponse.js";
 import jwt from "jsonwebtoken";
+import { Video } from "../models/video.model.js";
 import mongoose from "mongoose";
 
 //generating a generalised method so we dont have to write everytime
@@ -306,7 +307,7 @@ const updateUserAvatar=asynchandler(async(req,res)=>{
 //update user CoverImage
 const updateUserCoverImage=asynchandler(async(req,res)=>{
     const coverLocalPath=req.file?.path  
-    if(!avatarLocalPath){
+    if(!coverLocalPath){
         throw new apierror(400,"Cover Image file is missing")                    //get through multer middleware
     }           
     const coverImage=  await uploadOnCloudinary(coverLocalPath)   
@@ -404,56 +405,62 @@ const getUserChannelProfile = asynchandler(async(req, res) => {
     )
 })
 
-
+// controllers/userController.js or watchController.js
+const addToWatchHistory = asynchandler(async (req, res) => {
+    const { videoId } = req.params;
+    const userId = req.user._id;
+  
+    if (!mongoose.Types.ObjectId.isValid(videoId)) {
+      throw new apierror(400, 'Invalid video ID');
+    }
+  
+    await User.findByIdAndUpdate(userId, {
+      $addToSet: { watchHistory: videoId }, // prevents duplicates
+    });
+  
+    return res.status(200).json(new apiresponse(200, {}, 'Added to watch history'));
+  });
 //watch history of user 
-const getWatchHistory=asynchandler(async(req,res)=>{
-    const user=await User.aggregate([
-        {
-            $match:{
-                _id:new mongoose.Types.ObjectId (req.user._id)                        //req.user._id give only string so to convert that into objectId we are doing this
-            }
-        },{
-            $lookup:{
-                from:"videos",
-                localField:"watchHistory",
-                foreignField:"_id",
-                as:"watchHistory",
-                pipeline:[
-                    {
-                        $lookup:{
-                            from:"users",
-                            localField:"owner",
-                            foreignField:"_id",
-                            as:"owner",
-                            pipeline:[
-                                {
-                                    $project:{
-                                        fullName:1,
-                                        userName:1,
-                                        avatar:1,
-                                         
-                                    }
-                                }
-                            ]
-                        }
-                    },{
-                        $addFields:{
-                            owner:{
-                                $first: "$owner "
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-    ])
-
-    return res
-    .status(200)
-    .json(new apiresponse(200,user[0].watchHistory,"Watch history fetch successfully"))
-})
-
+const watchHistory = asynchandler(async (req, res) => {
+    const userId = req.user._id;
+  
+    const user = await User.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(userId) } },
+      {
+        $lookup: {
+          from: "videos",
+          localField: "watchHistory",
+          foreignField: "_id",
+          as: "watchHistory",
+          pipeline: [
+            {
+              $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                  { $project: { fullName: 1, username: 1, avatar: 1 } },
+                ],
+              },
+            },
+            { $addFields: { owner: { $first: "$owner" } } },
+            { $sort: { createdAt: -1 } }, // newest watched first
+          ],
+        },
+      },
+      { $project: { watchHistory: 1 } },
+    ]);
+  
+    return res.status(200).json(
+      new apiresponse(
+        200,
+        user[0]?.watchHistory || [],
+        "Watch history fetched successfully"
+      )
+    );
+  });
 
 export {registerUser,loginUser,loggedOutUser,refreshAccessToken,changeCurrentPassword,getCurrentUser,updateAccountDetails,updateUserAvatar,updateUserCoverImage,
-    getUserChannelProfile,getWatchHistory
+    getUserChannelProfile,watchHistory,addToWatchHistory
 }   
