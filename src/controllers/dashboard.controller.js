@@ -178,19 +178,34 @@ const getChannelStats = asynchandler(async (req, res) => {
   const getChannelVideos = asynchandler(async (req, res) => {
     const userId = req.user._id;
   
-    /*
-     Fetching All Videos Uploaded by the User (Channel Owner)
-      -----------------------------------------------------------
-      - We use `Video.find({ owner: userId })` to search for all videos where the `owner` field matches `userId`.
-      - `userId` represents the currently logged-in user, meaning we are getting only THEIR videos.
-    */
-    const videos = await Video.find({
-      owner: userId,
-    }).sort({
-      createdAt: -1, // Sorting videos in descending order (newest first)
-    });
+    const videos = await Video.aggregate([
+        {
+          $match: { owner: userId },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+        {
+          $lookup: {
+            from: "likes",           // collection name in MongoDB
+            localField: "_id",       // _id of Video
+            foreignField: "video",   // field in likes that references Video
+            as: "likes",
+          },
+        },
+        {
+          $addFields: {
+            likeCount: { $size: "$likes" },
+          },
+        },
+        {
+          $project: {
+            likes: 0,
+            __v: 0,
+          },
+        },
+      ]);
   
-    // - This ensures that the client knows when a channel has no videos.
     if (!videos || videos.length === 0) {
       throw new apierror(404, "No videos found for this channel");
     }
@@ -199,6 +214,7 @@ const getChannelStats = asynchandler(async (req, res) => {
       .status(200)
       .json(new apiresponse(200, videos, "Channel videos fetched successfully"));
   });
+
   const getLikeTimeline = asynchandler(async (req, res) => {
     const userId = req.user._id;
   

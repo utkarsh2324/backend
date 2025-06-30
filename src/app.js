@@ -27,6 +27,7 @@ import videoRouter from "./routes/video.routes.js"
 import likeRouter from "./routes/like.routes.js"
 import playlistRouter from "./routes/playlist.routes.js";
 import dashboardRouter from "./routes/dashboard.routes.js";
+import searchRouter from "./routes/search.routes.js";
 
 //Routes Declaration
 app.use("/api/v1/users",userRouter)                       //http:localhost:8000/api/v1/users/register (from user.routes.js file)
@@ -37,4 +38,5 @@ app.use("/api/v1/videos", videoRouter)
 app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/playlist", playlistRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
+app.use("/api/v1/search", searchRouter);
 export default app;
